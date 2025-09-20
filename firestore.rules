@@ -1,0 +1,128 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+    function creatingOwn() {
+      return signedIn() && request.resource.data.userId == request.auth.uid;
+    }
+    function isOwner() {
+      return signedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    match /entries/{id} {
+      // Allow creating either a draft (submitted=false) with optional text,
+      // or a submitted entry (submitted=true) with required text constraints.
+      allow create: if creatingOwn()
+        && request.resource.data.processed == false
+        && (
+          // Draft entry: can omit text or include up to 5000 chars
+          (
+            request.resource.data.submitted == false
+            && request.resource.data.keys().hasOnly([
+              'entryId','userId','text','createdAt','processed','submitted'
+            ])
+            && (
+              !request.resource.data.keys().hasAny(['text']) || (
+                request.resource.data.text is string && request.resource.data.text.size() <= 5000
+              )
+            )
+          )
+          ||
+          // Submitted entry: text required and length-limited; moderation optional map
+          (
+            request.resource.data.submitted == true
+            && request.resource.data.text is string
+            && request.resource.data.text.size() > 0
+            && request.resource.data.text.size() <= 5000
+            && (
+              !request.resource.data.keys().hasAll(['moderation']) || request.resource.data.moderation is map
+            )
+            && request.resource.data.keys().hasOnly([
+              'entryId','userId','text','createdAt','processed','submitted','moderation'
+            ])
+          )
+        );
+      allow read: if isOwner();
+      allow update, delete: if false;
+    }
+
+    match /insights/{id} {
+      allow read: if isOwner();
+      allow write: if false;
+    }
+
+    match /capsules/{id} {
+      allow read: if isOwner();
+      allow write: if false;
+    }
+
+    match /alerts/{id} {
+      allow read: if isOwner();
+      allow write: if false;
+    }
+
+    match /twinStates/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid; // user sees their twin
+      allow write: if false; // only server-side functions
+    }
+
+    match /swarmSnapshots/{sid} {
+      allow read: if true; // aggregated + anonymized
+      allow write: if false;
+    }
+
+    // Public narrative (curated, non-identifying summary)
+    match /swarmNarratives/{nid} {
+      allow read: if true;
+      allow write: if false; // server-only via admin endpoint
+    }
+
+    match /capsuleEmbeddings/{capId} {
+      allow read: if isOwner();
+      allow write: if false; // Only server functions write embeddings
+    }
+
+    // Similarity decision logs (server write-only, user can read their own decisions)
+    match /similarityDecisions/{id} {
+      allow read: if isOwner();
+      allow write: if false;
+    }
+
+    // Media assets (audio/image) - client creates pending record only
+    match /mediaAssets/{id} {
+      allow create: if creatingOwn()
+        && request.resource.data.keys().hasOnly([
+          'assetId','userId','entryId','type','mime','status','createdAt','updatedAt','sizeBytes','version'
+        ])
+        && request.resource.data.status == 'pending'
+        && request.resource.data.type in ['audio','image'];
+      allow read: if isOwner();
+      allow update, delete: if false; // server functions mutate processing fields
+    }
+
+    // Classifier decision logs (user read-only, server written)
+    match /classifierDecisions/{id} {
+      allow read: if isOwner();
+      allow write: if false;
+    }
+
+    // Rate limiting tokens are server-maintained only.
+    match /rateLimits/{docId} {
+      allow read, write: if false;
+    }
+
+    match /users/{uid} {
+      allow create: if creatingOwn()
+        && request.resource.data.keys().hasOnly(['userId','displayName','createdAt']);
+      allow read, update: if signedIn() && request.auth.uid == uid;
+      allow delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

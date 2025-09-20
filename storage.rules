@@ -1,0 +1,19 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Only allow access to the dedicated media bucket
+    // Note: Rules are evaluated per bucket; this match will apply to all buckets unless limited by deploy target.
+    // Enforce path structure: media/{uid}/{entryId}/{assetId}
+    match /media/{uid}/{entryId}/{assetId} {
+      allow read: if request.auth != null && request.auth.uid == uid
+                  || resource.metadata.visibility == 'public';
+      // Allow writes only by the owner and only for create/update of their own path
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Deny everything else by default
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

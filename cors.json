@@ -1,0 +1,19 @@
+[
+  {
+    "origin": [
+      "http://localhost:5173",
+      "http://localhost:5174",
+      "https://mindscribe-472408.web.app",
+      "https://mindscribe-472408.firebaseapp.com"
+    ],
+    "method": ["GET", "PUT", "HEAD"],
+    "responseHeader": [
+      "Content-Type",
+      "x-goog-meta-userId",
+      "x-goog-meta-entryId",
+      "x-goog-meta-type",
+      "x-goog-meta-assetId"
+    ],
+    "maxAgeSeconds": 3600
+  }
+]
