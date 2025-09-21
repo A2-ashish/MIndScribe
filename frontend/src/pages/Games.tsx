@@ -9,14 +9,10 @@ export function Games() {
       <div className="games-section">
         <MemoryGameCard />
         <BreathingCard />
-
-        <Card className="games-card" style={{ marginTop: 16 }}>
-          <div className="games-coming">
-            <div className="games-coming-icon" aria-hidden>✨</div>
-            <h3>More Games Coming Soon!</h3>
-            <p>We're developing more interactive games to support your mental wellness journey.</p>
-          </div>
-        </Card>
+        <BoxBreathingCard />
+        <ColorFocusCard />
+        <ReactionCard />
+        <GratitudeCard />
       </div>
     </div>
   );
@@ -25,11 +21,12 @@ export function Games() {
 function MemoryGameCard() {
   const [level, setLevel] = useState(1);
   const [status, setStatus] = useState<'idle' | 'showing' | 'input' | 'win' | 'fail'>('idle');
+  // Stronger contrast for clearer color change while playing
   const colors = [
-    { key: 'green', label: 'Green', bg: '#c8f1d6', active: '#86efac' },
-    { key: 'coral', label: 'Coral', bg: '#ffd5cc', active: '#fecaca' },
-    { key: 'purple', label: 'Purple', bg: '#e2d9ff', active: '#ddd6fe' },
-    { key: 'orange', label: 'Orange', bg: '#fde6c9', active: '#fed7aa' },
+    { key: 'green', label: 'Green', bg: '#d1fae5', active: '#10b981' }, // emerald
+    { key: 'coral', label: 'Coral', bg: '#ffe4e6', active: '#f43f5e' }, // rose
+    { key: 'purple', label: 'Purple', bg: '#ede9fe', active: '#8b5cf6' }, // violet
+    { key: 'orange', label: 'Orange', bg: '#ffedd5', active: '#f59e0b' }, // amber
   ] as const;
 
   const seqRef = useRef<number[]>([]);
@@ -63,7 +60,7 @@ function MemoryGameCard() {
         setActiveIdx(null);
         i++;
         setTimeout(flash, 250);
-      }, 550);
+      }, 600);
     };
     flash();
   });
@@ -120,6 +117,10 @@ function MemoryGameCard() {
             onClick={() => press(idx)}
             style={{
               background: activeIdx === idx ? c.active : c.bg,
+              color: activeIdx === idx ? '#0b1020' : '#111827',
+              border: activeIdx === idx ? `2px solid ${c.active}` : '1px solid var(--color-outline)',
+              boxShadow: activeIdx === idx ? `0 0 0 4px ${c.active}22, 0 8px 18px ${c.active}33` : 'none',
+              transform: activeIdx === idx ? 'scale(1.03)' : undefined,
             }}
           >
             <span>{c.label}</span>
@@ -168,7 +169,7 @@ function BreathingCard() {
     return () => { if (timerRef.current) window.clearInterval(timerRef.current); };
   }, [running, cycle]);
 
-  const phaseColor = phase === 'inhale' ? '#8b5cf6' : phase === 'hold' ? '#a78bfa' : '#34d399';
+  const phaseColor = phase === 'inhale' ? '#7c3aed' : phase === 'hold' ? '#a78bfa' : '#10b981';
   const label = phase === 'inhale' ? 'Inhale' : phase === 'hold' ? 'Hold' : 'Exhale';
 
   return (
@@ -177,20 +178,33 @@ function BreathingCard() {
         <h3 style={{ margin: 0 }}>Mindful Breathing</h3>
         <div style={{ opacity: 0.8 }}>4–4–6 pattern</div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+        {/* Centered breathing circle with middle guide */}
+        <div style={{ position: 'relative', width: 180, height: 180, display: 'grid', placeItems: 'center' }}>
+          {/* Outer ring */}
           <div
             aria-label="breathing-visual"
             style={{
-              width: 64, height: 64, borderRadius: 9999,
-              background: phaseColor,
-              transform: `scale(${phase === 'inhale' ? 1.1 : phase === 'hold' ? 1.0 : 0.9})`,
-              transition: 'transform 800ms ease, background 200ms ease'
+              position: 'absolute', inset: 0, borderRadius: 9999,
+              border: `10px solid ${phaseColor}`,
+              boxShadow: `0 0 0 6px ${phaseColor}22, 0 12px 24px ${phaseColor}33`,
+              transform: `scale(${phase === 'inhale' ? 1.08 : phase === 'hold' ? 1.0 : 0.92})`,
+              transition: 'transform 900ms ease, border-color 200ms ease, box-shadow 200ms ease'
             }}
           />
-          <div>
-            <div style={{ fontWeight: 600 }}>{label}</div>
-            <div style={{ opacity: 0.8, fontVariantNumeric: 'tabular-nums' }}>{secondsLeft}s</div>
+          {/* Middle filled circle */}
+          <div
+            style={{
+              width: 80, height: 80, borderRadius: 9999,
+              background: phaseColor,
+              boxShadow: `0 6px 18px ${phaseColor}55 inset`,
+              transition: 'background 200ms ease'
+            }}
+          />
+          {/* Text overlay */}
+          <div style={{ position: 'absolute', textAlign: 'center', color: '#0b1020' }}>
+            <div style={{ fontWeight: 700 }}>{label}</div>
+            <div style={{ opacity: 0.85, fontVariantNumeric: 'tabular-nums' }}>{secondsLeft}s</div>
           </div>
         </div>
         <Button variant={running ? 'secondary' : 'primary'} onClick={() => setRunning(v => !v)}>
@@ -252,13 +266,14 @@ function ReactionCard() {
           style={{
             userSelect: 'none', cursor: 'pointer',
             padding: 16, borderRadius: 12,
-            background: phase === 'ready' ? '#d1fae5' : phase === 'waiting' ? '#fee2e2' : '#f3f4f6',
+            background: phase === 'ready' ? '#10b981' : phase === 'waiting' ? '#f87171' : '#e5e7eb',
+            color: phase === 'ready' ? '#0b1020' : '#111827',
             border: '1px solid var(--color-outline)'
           }}
         >
           {phase === 'idle' && <div>Press Start, then click when it turns green</div>}
           {phase === 'waiting' && <div>Wait for green…</div>}
-          {phase === 'ready' && <div>Tap!</div>}
+          {phase === 'ready' && <div style={{ fontWeight: 700 }}>Tap!</div>}
           {phase === 'result' && <div>Reaction: <b>{result} ms</b>{best != null && <> • Best: <b>{best} ms</b></>}</div>}
           {phase === 'toosoon' && <div>Too soon! Press Start to try again.</div>}
         </div>
@@ -308,6 +323,106 @@ function GratitudeCard() {
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
         <Button variant="secondary" onClick={spin}>New Prompt</Button>
         <Button onClick={copy}>Copy</Button>
+      </div>
+    </Card>
+  );
+}
+
+function BoxBreathingCard() {
+  type Phase = 'inhale' | 'hold1' | 'exhale' | 'hold2';
+  const [running, setRunning] = useState(false);
+  const [phase, setPhase] = useState<Phase>('inhale');
+  const [secondsLeft, setSecondsLeft] = useState(4);
+  const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!running) {
+      if (timerRef.current) { window.clearInterval(timerRef.current); timerRef.current = null; }
+      return;
+    }
+    setPhase('inhale');
+    setSecondsLeft(4);
+    const tick = () => {
+      setSecondsLeft((s) => {
+        if (s > 1) return s - 1;
+        setPhase((p) => {
+          if (p === 'inhale') { setSecondsLeft(4); return 'hold1'; }
+          if (p === 'hold1') { setSecondsLeft(4); return 'exhale'; }
+          if (p === 'exhale') { setSecondsLeft(4); return 'hold2'; }
+          setSecondsLeft(4); return 'inhale';
+        });
+        return 0;
+      });
+    };
+    timerRef.current = window.setInterval(tick, 1000);
+    return () => { if (timerRef.current) window.clearInterval(timerRef.current); };
+  }, [running]);
+
+  const label = phase === 'inhale' ? 'Inhale' : phase === 'exhale' ? 'Exhale' : 'Hold';
+  const color = phase === 'inhale' ? '#60a5fa' : phase === 'exhale' ? '#34d399' : '#a5b4fc';
+
+  return (
+    <Card className="p-6 wellness-card">
+      <div className="section-header" style={{ marginBottom: 8 }}>
+        <h3 style={{ margin: 0 }}>Box Breathing</h3>
+        <div style={{ opacity: 0.8 }}>4–4–4–4 pattern</div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+        <div style={{ position: 'relative', width: 180, height: 180 }}>
+          {/* Square outline that subtly scales per phase */}
+          <div style={{
+            position: 'absolute', inset: 20,
+            border: `8px solid ${color}`,
+            borderRadius: 16,
+            boxShadow: `0 0 0 6px ${color}22, 0 12px 24px ${color}33`,
+            transform: `scale(${phase === 'inhale' ? 1.06 : phase === 'exhale' ? 0.94 : 1.0})`,
+            transition: 'transform 900ms ease, border-color 200ms ease, box-shadow 200ms ease'
+          }} />
+          {/* Center label */}
+          <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', textAlign: 'center' }}>
+            <div style={{ fontWeight: 700 }}>{label}</div>
+            <div style={{ opacity: 0.85, fontVariantNumeric: 'tabular-nums' }}>{secondsLeft}s</div>
+          </div>
+        </div>
+        <Button variant={running ? 'secondary' : 'primary'} onClick={() => setRunning(v => !v)}>
+          {running ? 'Stop' : 'Start'}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+function ColorFocusCard() {
+  const palette = ['#c7d2fe', '#bae6fd', '#bbf7d0', '#fde68a', '#fecaca'];
+  const [idx, setIdx] = useState(0);
+  const [running, setRunning] = useState(true);
+  const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!running) { if (timerRef.current) { window.clearInterval(timerRef.current); timerRef.current = null; } return; }
+    timerRef.current = window.setInterval(() => setIdx((i) => (i + 1) % palette.length), 3000);
+    return () => { if (timerRef.current) window.clearInterval(timerRef.current); };
+  }, [running]);
+
+  return (
+    <Card className="p-6 wellness-card">
+      <div className="section-header" style={{ marginBottom: 8 }}>
+        <h3 style={{ margin: 0 }}>Color Focus</h3>
+        <div style={{ opacity: 0.8 }}>Gently shift focus across calming colors</div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'center' }}>
+        <div style={{
+          height: 90,
+          borderRadius: 12,
+          border: '1px solid var(--color-outline)',
+          background: palette[idx],
+          transition: 'background 1200ms ease'
+        }} />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button variant="secondary" onClick={() => setIdx((i) => (i + palette.length - 1) % palette.length)}>Prev</Button>
+          <Button variant="secondary" onClick={() => setIdx((i) => (i + 1) % palette.length)}>Next</Button>
+          <Button onClick={() => setRunning(v => !v)}>{running ? 'Pause' : 'Play'}</Button>
+        </div>
       </div>
     </Card>
   );
