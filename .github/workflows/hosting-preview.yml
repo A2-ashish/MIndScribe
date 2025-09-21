@@ -1,0 +1,59 @@
+name: Firebase Hosting PR Preview
+
+on:
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: hosting-preview-${{ github.event.number }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Create preview channel and deploy
+        id: deploy
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          CHANNEL="pr-${{ github.event.number }}"
+          firebase hosting:channel:deploy "$CHANNEL" --project mindscribe-472408 --json > deploy.json
+          echo "json=$(cat deploy.json)" >> $GITHUB_OUTPUT
+
+      - name: Extract preview URL
+        id: parse
+        run: |
+          node -e "const o=require('./deploy.json'); const url=o.result?.hosting?.deploys?.[0]?.urls?.[0] || o.result?.urls?.[0]; if(!url){process.exit(1)} console.log(url)" > preview_url.txt
+          echo "url=$(cat preview_url.txt)" >> $GITHUB_OUTPUT
+
+      - name: Comment preview URL on PR
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: firebase-preview
+          message: |
+            🚀 Firebase Hosting preview is ready:
+            ${{ steps.parse.outputs.url }}
+
+      - name: Cleanup preview channel on close
+        if: ${{ github.event.action == 'closed' }}
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          CHANNEL="pr-${{ github.event.number }}"
+          firebase hosting:channel:delete "$CHANNEL" --project mindscribe-472408 --force || true
