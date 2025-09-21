@@ -15,17 +15,17 @@ function normalizeQuery(moodOrTopic: string): string {
   if (!t) return 'calm focus lofi';
   // Map common moods to search-intent phrases
   const map: Record<string, string> = {
-    sad: 'uplifting calm music',
-    anxious: 'anxiety relief breathing music',
-    stressed: 'calm ambient focus music',
-    angry: 'soothing ambient slow music',
-    neutral: 'lofi calm background music',
-    happy: 'positive relaxing instrumental',
-    focus: 'lofi focus beats',
-    calm: 'calm ambient music',
-    tired: 'gentle piano relaxation'
+    sad: 'uplifting calm indian music',
+    anxious: 'anxiety relief indian instrumental',
+    stressed: 'calm indian ambient focus music',
+    angry: 'soothing slow indian classical instrumental',
+    neutral: 'lofi calm indian background music',
+    happy: 'positive relaxing indian instrumental',
+    focus: 'lofi focus indian beats',
+    calm: 'calm indian ambient music',
+    tired: 'gentle indian piano relaxation'
   };
-  return map[t] || `${t} relaxing music`;
+  return map[t] || `${t} relaxing indian music`;
 }
 
 export async function recommendPlaylists(moodOrTopic: string, opts: SearchOpts = {}): Promise<PlaylistRecommendation> {
@@ -59,10 +59,11 @@ export async function recommendPlaylists(moodOrTopic: string, opts: SearchOpts =
     url.searchParams.set('part', 'snippet');
     url.searchParams.set('maxResults', String(max));
     url.searchParams.set('q', q);
-    url.searchParams.set('type', 'video');
+  url.searchParams.set('type', 'video');
     url.searchParams.set('videoCategoryId', '10'); // Music
     url.searchParams.set('videoEmbeddable', 'true');
     url.searchParams.set('safeSearch', 'moderate');
+  url.searchParams.set('regionCode', 'IN');
 
     const resp = await fetch(url.toString());
     if (!resp.ok) throw new Error(`YouTube API error: ${resp.status}`);

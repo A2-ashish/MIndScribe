@@ -1,6 +1,6 @@
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { db } from '../lib/firestore';
-import { analyzeText } from '../lib/gemini';
+import { analyzeText, generateQuickGuidance } from '../lib/gemini';
 import { classifyText, CLASSIFIER_MODEL_VERSION, computeGatingShadow } from '../lib/classifier';
 import { MEDIA_PIPELINE_VERSION } from '../lib/media';
 import { computeRiskAction } from '../lib/safety';
@@ -59,6 +59,9 @@ export const onEntryCreated = onDocumentWritten(
       classifyText(enrichedText)
     ]);
 
+    // Derive a compact guidance snippet to help the user right away
+    const guidance = await generateQuickGuidance({ text: enrichedText, analysis });
+
     const insightRef = db.collection('insights').doc();
     const CLASSIFIER_ENFORCE = (process.env.CLASSIFIER_ENFORCE || 'off').toLowerCase();
     const enforcement: 'off'|'soft'|'hard' = (CLASSIFIER_ENFORCE === 'soft' || CLASSIFIER_ENFORCE === 'hard') ? CLASSIFIER_ENFORCE as any : 'off';
@@ -97,6 +100,7 @@ export const onEntryCreated = onDocumentWritten(
       topics: analysis.topics,
       risk: analysis.risk,
       confidence: analysis.confidence,
+      guidance,
       enforcement,
       createdAt: Timestamp.now()
     });

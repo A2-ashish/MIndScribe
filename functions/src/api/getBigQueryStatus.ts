@@ -1,5 +1,4 @@
 import { onRequest } from 'firebase-functions/v2/https';
-import { BigQuery } from '@google-cloud/bigquery';
 import { REGION } from '../config/region';
 import { errorResponse, HttpError } from '../lib/httpError';
 
@@ -27,6 +26,9 @@ export const getBigQueryStatus = onRequest({ region: REGION }, async (req, res) 
   const hours = hoursParam !== undefined ? Number(hoursParam) : 24;
   const fix = (req.method === 'POST') && (req.query.fix === 'true' || req.body?.fix === true);
 
+  // Lazy import BigQuery to avoid heavy module graph at init
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { BigQuery } = require('@google-cloud/bigquery');
   const bq = new BigQuery();
     const dataset = bq.dataset(BQ_DATASET);
 

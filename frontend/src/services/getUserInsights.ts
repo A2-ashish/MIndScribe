@@ -8,6 +8,9 @@ export type InsightDoc = {
   createdAt?: any;
   summary?: string;
   emotions?: any;
+  sentiment?: { compound?: number };
+  risk?: { suicidal?: number; self_harm?: number; violence?: number };
+  guidance?: { word?: string; suggestion?: string; cta?: { label?: string; route?: string }; safety?: 'ok'|'caution'|'high-risk' };
 };
 
 export type CapsuleDoc = {

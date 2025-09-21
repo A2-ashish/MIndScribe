@@ -17,7 +17,7 @@ export type CapsulesPage = {
   nextCursor: any | null; // createdAt of last item
 };
 
-export async function listUserCapsulesPage(uid: string, pageSize = 10, startAfterCreatedAt?: any): Promise<CapsulesPage> {
+export async function listUserCapsulesPage(uid: string, pageSize = 5, startAfterCreatedAt?: any): Promise<CapsulesPage> {
   const base = [
     collection(db, 'capsules'),
     where('userId', '==', uid),

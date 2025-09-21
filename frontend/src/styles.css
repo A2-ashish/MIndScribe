@@ -9,6 +9,8 @@
   --color-outline: #dadce0;
   --color-primary: #1a73e8; /* Google blue */
   --color-primary-variant: #185abc;
+  /* Accent overridable color for important buttons/pills */
+  --color-accent: #6b4fd8; /* lavender by default */
   --color-secondary: #e8f0fe; /* light blue chip */
   --shadow-1: 0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
   --shadow-2: 0 2px 6px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.06);
@@ -111,6 +113,7 @@ html[data-theme="dark"] {
   --color-outline: #22304d;
   --color-primary: #8ab4f8;
   --color-primary-variant: #6ea1f3;
+  --color-accent: #8b5cf6; /* keep vibrant in dark */
   --color-secondary: #17223b;
   background: radial-gradient(700px 700px at var(--mx) var(--my), rgba(138,180,248,0.12), transparent 70%),
               radial-gradient(520px 520px at calc(100% - var(--mx)) calc(100% - var(--my)), rgba(66,133,244,0.10), transparent 65%),
@@ -128,6 +131,7 @@ html[data-theme="lavender"] {
   --color-outline: #eadcff;
   --color-primary: #6b4fd8; /* lavender primary */
   --color-primary-variant: #563ac6;
+  --color-accent: #6b4fd8;
   --color-secondary: #f6f0ff;
   background: radial-gradient(720px 720px at var(--mx) var(--my), rgba(107,79,216,0.12), transparent 70%),
               radial-gradient(520px 520px at calc(100% - var(--mx)) calc(100% - var(--my)), rgba(186,146,255,0.10), transparent 65%),
@@ -143,6 +147,7 @@ html[data-theme="light"] {
   --color-outline: #dadce0;
   --color-primary: #1a73e8;
   --color-primary-variant: #185abc;
+  --color-accent: #6b4fd8; /* accent in light too */
   --color-secondary: #e8f0fe;
   background: radial-gradient(700px 700px at var(--mx) var(--my), rgba(26,115,232,0.08), transparent 70%),
               radial-gradient(500px 500px at calc(100% - var(--mx)) calc(100% - var(--my)), rgba(52,168,83,0.06), transparent 65%),
@@ -297,6 +302,7 @@ pre {
   color: #1f1f1f;
   padding: 10px 8px;
   border-radius: 12px;
+  position: relative; /* allow pill positioning */
 }
 .bn-item.active {
   background: #f6f0ff;
@@ -322,6 +328,74 @@ pre {
 .wellness-card {
   background-image: linear-gradient(180deg, #fff, #f8f9fb);
   box-shadow: 0 8px 24px rgba(139, 92, 246, 0.08);
+}
+
+/* Insights page scoped styles */
+.insights-page {
+  /* More generous page padding to avoid bottom-nav overlap and reduce clutter */
+  padding: 1.5rem 1rem 5.5rem;
+}
+.insights-page .section-header h3 {
+  font-size: 1rem;
+  letter-spacing: 0.2px;
+}
+.insights-page .wellness-card {
+  border-radius: 14px;
+  /* Increase inner padding of cards on Insights for breathing room */
+  padding: 18px 20px !important;
+}
+.insights-page .gallery-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.insights-page .meta-badge {
+  background: #f6f0ff;
+  color: #6b4fd8;
+  border: 1px solid #e5ddff;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+}
+
+/* Spread out vertical stacks on the Insights page */
+.insights-page .space-y-6 > * + * { margin-top: 20px !important; }
+.insights-page .space-y-3 > * + * { margin-top: 12px !important; }
+
+/* Give the segmented period switch some breathing room and larger tap targets */
+.insights-page .segmented { margin: 8px auto 14px; padding: 4px; }
+.insights-page .segmented button { padding: 8px 14px; border-radius: 8px; }
+.insights-page .segmented .secondary-active { box-shadow: 0 1px 0 rgba(0,0,0,0.04) inset; }
+
+/* Button variants for professional look */
+.btn { all: unset; }
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+  background: var(--color-accent);
+  color: #fff;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.06);
+}
+.btn:hover { filter: brightness(0.95); }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.btn-outline {
+  background: transparent;
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent);
+}
+.btn-ghost {
+  background: transparent;
+  color: var(--color-on-surface);
+  border: 1px solid var(--color-outline);
 }
 .modal-backdrop {
   position: fixed;

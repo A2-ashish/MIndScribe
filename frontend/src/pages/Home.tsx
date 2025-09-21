@@ -4,11 +4,14 @@ import { getUserStats, type UserStats } from '../services/getUserStats';
 import { ensureUser } from '../auth';
 import { Card } from '../components/ui/card';
 import { Progress } from '../components/ui/progress';
+import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { db } from '../firebaseCore';
 
 export function Home() {
   const [uid, setUid] = useState<string | null>(null);
   const [counts, setCounts] = useState<UserCounts | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
+  const [guidance, setGuidance] = useState<{ word?: string; cta?: { label?: string; route?: string }; safety?: 'ok'|'caution'|'high-risk' } | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -18,6 +21,19 @@ export function Home() {
       setUid(u.uid);
       try { setCounts(await getUserCounts(u.uid)); } catch { /* ignore */ }
       try { setStats(await getUserStats(u.uid)); } catch { /* ignore */ }
+      // Realtime badge: latest insight guidance
+      const latestQ = query(
+        collection(db, 'insights'),
+        where('userId', '==', u.uid),
+        orderBy('createdAt', 'desc'),
+        limit(1)
+      );
+      const unsub = onSnapshot(latestQ, (snap) => {
+        const d = snap.docs[0];
+        const data = d?.data() as any;
+        setGuidance(data?.guidance || null);
+      });
+      return () => unsub();
     })();
     return () => { mounted = false; };
   }, []);
@@ -100,6 +116,28 @@ export function Home() {
             </a>
           ))}
         </div>
+        {guidance && (
+          <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.85rem',
+                padding: '6px 10px', borderRadius: 9999,
+                background: guidance.safety === 'high-risk' ? '#fff1f2' : guidance.safety === 'caution' ? '#fffbeb' : '#eef2ff',
+                color: guidance.safety === 'high-risk' ? '#b91c1c' : guidance.safety === 'caution' ? '#92400e' : '#3730a3',
+                border: '1px solid ' + (guidance.safety === 'high-risk' ? '#fecaca' : guidance.safety === 'caution' ? '#fcd34d' : '#c7d2fe')
+              }}
+            >
+              {guidance.word ? `Guidance: ${guidance.word}` : 'Guidance available'}
+            </span>
+            {guidance.cta?.route && (
+              <a
+                className="secondary"
+                href={guidance.cta.route}
+                style={{ padding: '6px 10px', borderRadius: 8, textDecoration: 'none' }}
+              >{guidance.cta.label || 'Open'}</a>
+            )}
+          </div>
+        )}
       </Card>
 
       <div className="panel">

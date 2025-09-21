@@ -19,6 +19,7 @@ const MODEL_ANALYSIS = process.env.GEMINI_MODEL_ANALYSIS || 'gemini-2.5-pro';
 const MODEL_STORY = process.env.GEMINI_MODEL_STORY || 'gemini-2.5-flash';
 const MODEL_BREATHING = process.env.GEMINI_MODEL_BREATHING || 'gemini-2.5-pro';
 const MODEL_ART = process.env.GEMINI_MODEL_ART || 'gemini-2.5-pro';
+const MODEL_CHAT = process.env.GEMINI_MODEL_CHAT || MODEL_STORY;
 
 /**
  * Lazily instantiate the Gemini client if the API key is present.
@@ -226,6 +227,9 @@ Tone & safety guardrails:
 - Include a gentle self-regulation hint (breathing/grounding/reframing) as an invitation ("you might", "notice", "allow").
 - Avoid probing questions or prescriptive directives; avoid promises; never mention being an AI.
 
+Cultural context:
+- Write in a way that resonates with students in India. Subtle, respectful references are okay (e.g., monsoon evenings, a cup of chai, campus corridors, festivals as moments of pause) but avoid stereotypes and keep it inclusive. Use clear English; light Indian-English phrasing is fine if natural.
+
 Output: ONLY the story text (no markdown, no quotes).
 `;
 
@@ -255,6 +259,76 @@ Output: ONLY the story text (no markdown, no quotes).
     console.error('[generateStory] Gemini failure, using fallback:', err.message);
     return fallbackStory(topic);
   }
+}
+
+/**
+ * Generate 3-5 short motivational lines tailored to a cue.
+ */
+export async function generateMotivationalLines(cue: string): Promise<string[]> {
+  const topic = (cue || 'resilience').toLowerCase().trim();
+  const client = getClient();
+  if (!client) {
+    return [
+      'Small steps count—one gentle action today is enough.',
+      'Breathe in for 4, hold for 2, out for 6—repeat 3 times.',
+      'Name one thing you did right today—you deserve credit.',
+    ];
+  }
+  const model = client.getGenerativeModel({ model: MODEL_STORY });
+  const prompt = `Return ONLY JSON array of 3-5 short strings. Each line: supportive, non-clinical, calm; <= 12 words; no emojis.
+Cue: "${topic}"
+Examples: ["One gentle step is still progress.", "Notice one thing you did right today."]`;
+  try {
+    const res = await model.generateContent(prompt);
+    const raw = res.response.text().trim();
+    const arrMatch = raw.match(/\[[\s\S]*\]$/);
+    const parsed = JSON.parse(arrMatch ? arrMatch[0] : raw);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((s: any) => typeof s === 'string').slice(0, 5);
+    }
+  } catch (e:any) {
+    console.warn('[generateMotivationalLines] fallback', e?.message);
+  }
+  return [
+    'One gentle step is still progress.',
+    'Slow inhale 4, exhale 6—repeat three times.',
+    'Notice one thing that helped today.',
+  ];
+}
+
+/**
+ * Generate a short supportive chat with 3-4 turns.
+ */
+export async function generateSupportChat(cue: string): Promise<Array<{ role: 'guide'|'you'; text: string }>> {
+  const topic = (cue || 'calm').toLowerCase().trim();
+  const client = getClient();
+  if (!client) {
+    return [
+      { role: 'guide', text: 'Want to try two slow breaths together?' },
+      { role: 'you', text: 'Okay, I can do that.' },
+      { role: 'guide', text: 'Inhale 4… hold… exhale 6. Nice and easy.' },
+    ];
+  }
+  const model = client.getGenerativeModel({ model: MODEL_CHAT });
+  const prompt = `You are writing a supportive mini chat between a "guide" and "you".
+Return ONLY JSON array of 3-4 objects like {"role":"guide"|"you","text":string}. Keep responses brief, safe, and non-clinical. No emojis. Cue: "${topic}".`;
+  try {
+    const res = await model.generateContent(prompt);
+    const raw = res.response.text().trim();
+    const arrMatch = raw.match(/\[[\s\S]*\]$/);
+    const parsed = JSON.parse(arrMatch ? arrMatch[0] : raw);
+    const valid = Array.isArray(parsed)
+      ? parsed.filter((m: any) => (m && (m.role === 'guide' || m.role === 'you') && typeof m.text === 'string'))
+      : [];
+    if (valid.length) return valid.slice(0, 4);
+  } catch (e:any) {
+    console.warn('[generateSupportChat] fallback', e?.message);
+  }
+  return [
+    { role: 'guide', text: 'Let’s slow it down—one steady breath.' },
+    { role: 'you', text: 'Breathing a bit easier now.' },
+    { role: 'guide', text: 'Nice. What small step feels doable next?' },
+  ];
 }
 
 /**
@@ -381,5 +455,114 @@ Return ONLY JSON.`;
     return { prompt: p, style, palette };
   } catch (e) {
     return fallbackArtPrompt(topic);
+  }
+}
+
+// ---------------------------
+// Quick Guidance Generation
+// ---------------------------
+export interface QuickGuidance {
+  word: string; // a single supportive word/phrase
+  suggestion: string; // a gentle 1–2 sentence suggestion
+  cta?: { label: string; route: string }; // client-side route for a next step
+  safety: 'ok' | 'caution' | 'high-risk';
+}
+
+function heuristicGuidance(text: string, analysis: AnalysisResult): QuickGuidance {
+  const sent = typeof analysis.sentiment?.compound === 'number' ? analysis.sentiment.compound : 0;
+  const risk = analysis.risk || { suicidal: 0, self_harm: 0, violence: 0 };
+  const high = (risk.suicidal >= 0.75) || (risk.self_harm >= 0.7) || (risk.violence >= 0.6);
+  const primaryEmotion = analysis.emotions?.[0]?.label || (sent >= 0.25 ? 'positive' : sent <= -0.25 ? 'negative' : 'neutral');
+  const topic = Array.isArray(analysis.topics) && analysis.topics[0] ? analysis.topics[0] : 'today';
+
+  if (high) {
+    return {
+      word: 'you matter',
+      suggestion: 'If things feel heavy, you are not alone. You might try a few steady breaths, and consider reaching out to someone you trust. If this is an emergency, contact local help immediately.',
+      cta: { label: 'Try a calming breath', route: '#/games' },
+      safety: 'high-risk'
+    };
+  }
+
+  if (sent <= -0.25 || primaryEmotion === 'negative') {
+    return {
+      word: 'steady',
+      suggestion: 'Let’s slow it down together. Inhale for four, hold for two, and exhale for six—just once to start. You might also name one small thing you did well today.',
+      cta: { label: 'Open Calming Games', route: '#/games' },
+      safety: 'caution'
+    };
+  }
+
+  if (Math.abs(sent) < 0.25 || primaryEmotion === 'neutral') {
+    return {
+      word: 'curious',
+      suggestion: `Notice one feeling around ${topic} and write a single sentence about it. Small reflections build clarity over time.`,
+      cta: { label: 'See your latest capsule', route: '#/insights' },
+      safety: 'ok'
+    };
+  }
+
+  // Positive tilt
+  return {
+    word: 'momentum',
+    suggestion: 'Capture this energy with one tiny step—send a quick thank-you message or jot a short note for tomorrow. Small wins stack up.',
+    cta: { label: 'View AI response', route: '#/insights' },
+    safety: 'ok'
+  };
+}
+
+export async function generateQuickGuidance(input: { text?: string; analysis: AnalysisResult }): Promise<QuickGuidance> {
+  const { text = '', analysis } = input;
+  const client = getClient();
+  if (!client) return heuristicGuidance(text, analysis);
+
+  const model = client.getGenerativeModel({ model: MODEL_ANALYSIS });
+  const payload = {
+    sentiment: analysis.sentiment,
+    emotions: analysis.emotions,
+    topics: analysis.topics,
+    risk: analysis.risk,
+  };
+  const prompt = `You are a supportive journaling companion. Return ONLY strict JSON for a brief, safe guidance based on the user's latest entry analysis.
+Schema:
+{
+  "word": string,           // 1-2 words like "steady", "grounded", "curious"
+  "suggestion": string,     // 1–2 calm sentences, < 240 chars, neutral, inclusive
+  "cta": { "label": string, "route": string }, // suggested next step in the app; prefer route "#/games" for calming or "#/insights" for review
+  "safety": "ok" | "caution" | "high-risk"
+}
+Guardrails:
+- Warm, non-judgmental; avoid medical/clinical claims and sensitive/graphic content.
+- If high risk (suicidal >= 0.75, self_harm >= 0.7, or violence >= 0.6) set safety="high-risk" and suggest gentle reaching-out language; for CTA, prefer a calming step (route "#/games").
+- If negative tilt, keep grounding language and suggest a small calming action.
+- If neutral/positive, suggest a tiny reflective or appreciative action.
+- ABSOLUTELY NO extra text outside JSON.
+Input:
+${JSON.stringify(payload)}
+`;
+
+  try {
+    const resp = await model.generateContent(prompt);
+    const raw = resp.response.text().trim();
+    const jsonMatch = raw.match(/\{[\s\S]*\}$/);
+    const jsonStr = jsonMatch ? jsonMatch[0] : raw;
+    const parsed: any = JSON.parse(jsonStr);
+    const word = String(parsed.word || 'steady').slice(0, 40);
+    let suggestion = String(parsed.suggestion || '').trim();
+    if (!suggestion) suggestion = heuristicGuidance(text, analysis).suggestion;
+    if (suggestion.length > 280) suggestion = suggestion.slice(0, 280);
+    const cta = parsed.cta && typeof parsed.cta === 'object'
+      ? { label: String(parsed.cta.label || 'Open Calming Games').slice(0, 60), route: String(parsed.cta.route || '#/games') }
+      : { label: 'Open Calming Games', route: '#/games' };
+    const safety: QuickGuidance['safety'] = (parsed.safety === 'high-risk' || parsed.safety === 'caution') ? parsed.safety : 'ok';
+
+    // Safety overlay
+    const high = (analysis.risk?.suicidal ?? 0) >= 0.75 || (analysis.risk?.self_harm ?? 0) >= 0.7 || (analysis.risk?.violence ?? 0) >= 0.6;
+    if (high) {
+      return heuristicGuidance(text, analysis);
+    }
+    return { word, suggestion, cta, safety };
+  } catch (e) {
+    return heuristicGuidance(text, analysis);
   }
 }

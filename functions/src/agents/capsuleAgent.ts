@@ -1,9 +1,11 @@
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { db } from '../lib/firestore';
 import { decideCapsuleType } from '../lib/capsuleSelector';
-import { generateStory, generateBreathingPlan, generateArtPrompt } from '../lib/gemini';
+import { generateStory, generateBreathingPlan, generateArtPrompt, generateMotivationalLines, generateSupportChat } from '../lib/gemini';
 import { recommendPlaylists } from '../lib/youtube';
 import { Timestamp } from 'firebase-admin/firestore';
+import * as admin from 'firebase-admin';
+import { VertexAI } from '@google-cloud/vertexai';
 import { findSimilarCapsule, storeCapsuleEmbedding, logSimilarityDecision } from '../lib/similarity';
 
 interface InsightDoc {
@@ -20,6 +22,10 @@ interface CapsulePayload {
   steps?: string[];
   tracks?: string[];
   artPrompt?: string;
+  motivational?: string[];
+  chat?: Array<{ role: 'guide'|'you'; text: string }>;
+  images?: string[]; // for now, derived prompts/urls if available in future
+  songs?: string[]; // alias for tracks
   reusedFrom?: string; // capsuleId reused
   similarityScore?: number;
 }
@@ -109,6 +115,9 @@ export const onInsightCreated = onDocumentCreated(
         const topicForStory = primaryTopic || primaryEmotion || 'your feelings';
         const story = await withTimeout(generateStory(topicForStory), 15000);
         payload.story = clampText(story, 1200);
+        // Add extras for richer response
+        try { payload.motivational = await withTimeout(generateMotivationalLines(topicForStory), 10000); } catch {}
+        try { payload.chat = await withTimeout(generateSupportChat(topicForStory), 12000); } catch {}
       }
 
       if (capsuleType === 'breathing' && !payload.steps) {
@@ -121,10 +130,45 @@ export const onInsightCreated = onDocumentCreated(
         const mood = primaryTopic || primaryEmotion || 'calm';
         const rec = await withTimeout(recommendPlaylists(mood, { max: 5 }), 12000);
         payload.tracks = rec.playlistUrls;
+        payload.songs = rec.playlistUrls;
       } else if (capsuleType === 'art' && !payload.artPrompt) {
         const cue = primaryTopic || primaryEmotion || 'calm';
         const art = await withTimeout(generateArtPrompt(cue), 12000);
         payload.artPrompt = `${art.prompt} | style: ${art.style} | palette: ${art.palette.join(', ')}`;
+        // Try Vertex AI Imagen; fallback to placeholder query URL if unavailable/fails.
+        try {
+          const project = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || process.env.PROJECT_ID;
+          const location = process.env.VERTEX_LOCATION || 'us-central1';
+          const vertex = new VertexAI({ project, location });
+          // Model name may vary by availability; prefer Imagen 3 if accessible.
+          const modelName = process.env.VERTEX_IMAGE_MODEL || 'imagen-3.0-generate-001';
+          const model = (vertex as any).getGenerativeModel({ model: modelName });
+          const req = {
+            contents: [
+              { role: 'user', parts: [ { text: `Indian calming abstract: ${art.prompt}` } ] }
+            ],
+            generationConfig: { responseMimeType: 'image/png', aspectRatio: '1:1' }
+          };
+          const result = await model.generateContent(req);
+          const candidates = (result?.response?.candidates || []);
+          const parts = candidates[0]?.content?.parts || [];
+          const inline = parts.find((p: any) => p?.inlineData?.data);
+          const b64 = inline?.inlineData?.data;
+          if (b64) {
+            const buffer = Buffer.from(b64, 'base64');
+            const bucket = admin.storage().bucket();
+            const path = `capsule-images/${reservationRef.id}-${Date.now()}.png`;
+            const file = bucket.file(path);
+            await file.save(buffer, { contentType: 'image/png' });
+            // Signed URL (7 days)
+            const [url] = await file.getSignedUrl({ action: 'read', expires: Date.now() + 1000 * 60 * 60 * 24 * 7 });
+            payload.images = [url];
+          }
+        } catch (e:any) {
+          console.warn('[capsuleAgent] Vertex image generation failed, using placeholder', e?.message);
+          const q = encodeURIComponent(`indian ${art.prompt}`.slice(0, 80));
+          payload.images = [`https://source.unsplash.com/featured/?${q}`];
+        }
       }
     } catch (e: any) {
       errorMessage = e?.message || 'unknown_error';

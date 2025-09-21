@@ -23,9 +23,9 @@ export function Button({
 
   const variantStyle: Record<Variant, React.CSSProperties> = {
     primary: {
-      background: 'var(--color-primary)',
+      background: 'var(--color-accent)',
       color: '#fff',
-      border: '1px solid var(--color-primary)'
+      border: '1px solid var(--color-accent)'
     },
     secondary: {
       background: '#fff',

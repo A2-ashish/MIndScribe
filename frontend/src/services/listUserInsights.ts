@@ -10,6 +10,7 @@ export type InsightDoc = {
   emotions?: any;
   sentiment?: { compound?: number };
   risk?: { suicidal?: number; self_harm?: number; violence?: number };
+  guidance?: { word?: string; suggestion?: string; cta?: { label?: string; route?: string }; safety?: 'ok'|'caution'|'high-risk' };
 };
 
 export type InsightsPage = {
@@ -17,7 +18,7 @@ export type InsightsPage = {
   nextCursor: any | null; // createdAt of last item
 };
 
-export async function listUserInsightsPage(uid: string, pageSize = 10, startAfterCreatedAt?: any): Promise<InsightsPage> {
+export async function listUserInsightsPage(uid: string, pageSize = 5, startAfterCreatedAt?: any): Promise<InsightsPage> {
   const base = [
     collection(db, 'insights'),
     where('userId', '==', uid),

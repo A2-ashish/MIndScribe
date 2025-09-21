@@ -1,5 +1,4 @@
 import { onRequest } from 'firebase-functions/v2/https';
-import { BigQuery } from '@google-cloud/bigquery';
 import { REGION } from '../config/region';
 import { errorResponse, HttpError } from '../lib/httpError';
 
@@ -21,7 +20,10 @@ export const getAnalyticsSummary = onRequest({ region: REGION }, async (req, res
     const daysRaw = (req.query.days as string) || '14';
     let days = Math.max(1, Math.min(90, Number(daysRaw) || 14));
 
-    const bq = new BigQuery();
+  // Lazy import BigQuery to keep module init light for deploy analyzer
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { BigQuery } = require('@google-cloud/bigquery');
+  const bq = new BigQuery();
     const projectId = await bq.getProjectId();
     const insightsFq = `\`${projectId}.${BQ_DATASET}.${BQ_TABLE_INSIGHTS}\``;
     const capsulesFq = `\`${projectId}.${BQ_DATASET}.${BQ_TABLE_CAPSULES}\``;

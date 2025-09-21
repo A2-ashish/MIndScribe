@@ -1,6 +1,5 @@
 import { onRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { BigQuery } from '@google-cloud/bigquery';
 import { db } from '../lib/firestore';
 import { verifyAuth } from '../lib/auth';
 import { HttpError, errorResponse } from '../lib/httpError';
@@ -25,6 +24,9 @@ function hashUser(uid: string): string {
 }
 
 async function exportWindow(sinceMs: number) {
+  // Lazy import BigQuery to avoid heavy module graph during init/deploy analyze
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { BigQuery } = require('@google-cloud/bigquery');
   const bq = new BigQuery();
   const dataset = bq.dataset(BQ_DATASET);
   const insightsTable = dataset.table(BQ_TABLE_INSIGHTS);

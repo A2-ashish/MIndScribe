@@ -73,12 +73,13 @@ export function Toaster({ children }: { children?: React.ReactNode }) {
                       try {
                         if (action.onClick) action.onClick();
                         if (action.href) {
-                          if (action.href.startsWith('#')) {
-                            window.location.hash = action.href;
-                          } else {
-                            window.location.href = action.href;
+                            if (action.href.startsWith('#')) {
+                              // Set hash without leading '#', browser will prepend one
+                              window.location.hash = action.href.slice(1);
+                            } else {
+                              window.location.href = action.href;
+                            }
                           }
-                        }
                       } finally {
                         dismiss(t.id);
                       }
@@ -88,8 +89,8 @@ export function Toaster({ children }: { children?: React.ReactNode }) {
                       display: 'inline-flex', alignItems: 'center', gap: 6,
                       borderRadius: 8,
                       padding: '6px 10px',
-                      border: (t.action?.variant === 'secondary') ? '1px solid var(--color-outline)' : '1px solid var(--color-primary)',
-                      background: (t.action?.variant === 'secondary') ? '#fff' : 'var(--color-primary)',
+                      border: (t.action?.variant === 'secondary') ? '1px solid var(--color-outline)' : '1px solid var(--color-accent)',
+                      background: (t.action?.variant === 'secondary') ? '#fff' : 'var(--color-accent)',
                       color: (t.action?.variant === 'secondary') ? 'var(--color-on-surface)' : '#fff'
                     }}
                   >

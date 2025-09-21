@@ -8,6 +8,8 @@ import { getUserRecentInsightsWithCapsules } from '../services/getUserInsights';
 import { listUserInsightsPage, type InsightDoc } from '../services/listUserInsights';
 import { listUserCapsulesPage, type CapsuleDoc } from '../services/listUserCapsules';
 import { CapsuleDisplay } from '../components/CapsuleDisplay';
+import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { db } from '../firebaseCore';
 
 export function Insights() {
   const [period, setPeriod] = useState<'week'|'month'|'quarter'>('week');
@@ -22,6 +24,12 @@ export function Insights() {
   const [capsulesAll, setCapsulesAll] = useState<CapsuleDoc[]>([]);
   const [capsulesCursor, setCapsulesCursor] = useState<any | null>(null);
   const [capsulesLoadingMore, setCapsulesLoadingMore] = useState(false);
+  const [latestInsight, setLatestInsight] = useState<any | null>(null);
+  const [waitMsLeft, setWaitMsLeft] = useState<number>(12000);
+  const guidanceSafety: 'ok'|'caution'|'high-risk'|undefined = latestInsight?.guidance?.safety;
+  const guidanceBorder = guidanceSafety === 'high-risk' ? '#ef4444'
+    : guidanceSafety === 'caution' ? '#f59e0b'
+    : '#8b5cf6';
 
   function deriveInsightTitle(ins: any): string {
     if (!ins) return 'Insight';
@@ -48,18 +56,39 @@ export function Insights() {
 
   useEffect(() => {
     let mounted = true;
+    // soft waiting timer for new insights (auto-hides when a latestInsight arrives)
+    let waitTimer: any;
+    waitTimer = setInterval(() => {
+      setWaitMsLeft((ms) => {
+        if (ms <= 0 || latestInsight) return 0;
+        return ms - 250;
+      });
+    }, 250);
     (async () => {
       try {
         const u = await ensureUser();
         if (!mounted) return;
         setUid(u.uid);
         setLoading(true);
-        const items = await getUserRecentInsightsWithCapsules(u.uid, 5);
-        if (!mounted) return;
+        // Realtime listener for the very latest insight
+        const latestQ = query(
+          collection(db, 'insights'),
+          where('userId', '==', u.uid),
+          orderBy('createdAt', 'desc'),
+          limit(1)
+        );
+        const unsubLatest = onSnapshot(latestQ, (snap) => {
+          const d = snap.docs[0];
+          setLatestInsight(d ? (d.data() as any) : null);
+        });
+
+        // Kick off loading of recent insights+capsules for rest of page
+  const items = await getUserRecentInsightsWithCapsules(u.uid, 5);
+        if (!mounted) { unsubLatest(); return; }
         setRecent(items);
-  // Prime first pages for full history sections
-        const ins = await listUserInsightsPage(u.uid, 10);
-        const caps = await listUserCapsulesPage(u.uid, 10);
+  // Prime first pages for full history sections (initially show only 2)
+  const ins = await listUserInsightsPage(u.uid, 2);
+  const caps = await listUserCapsulesPage(u.uid, 2);
   if (!mounted) return;
   setInsightsAll(ins.items);
   setInsightsCursor(ins.nextCursor);
@@ -77,11 +106,16 @@ export function Insights() {
         if (mounted) setLoading(false);
       }
     })();
-    return () => { mounted = false; };
+    return () => { mounted = false; clearInterval(waitTimer); };
   }, []);
 
+  // When a latest insight is detected, stop showing the wait timer
+  useEffect(() => {
+    if (latestInsight) setWaitMsLeft(0);
+  }, [latestInsight]);
+
   return (
-    <div className="min-h-screen pb-20 px-4 pt-8" style={{ background: 'linear-gradient(180deg,#fff,#f6f7fb)' }}>
+    <div className="insights-page min-h-screen pb-20 px-4 pt-8" style={{ background: 'linear-gradient(180deg,#fff,#f6f7fb)' }}>
       <div className="max-w-lg mx-auto space-y-6">
         <div className="text-center space-y-2">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
@@ -108,6 +142,65 @@ export function Insights() {
           </div>
 
           <TabsContent value="overview" className="space-y-6">
+            {/* Soft wait for fresh insights */}
+            {!latestInsight && waitMsLeft > 0 && (
+              <Card className="p-4 wellness-card" style={{ borderLeft: '4px solid #e5e7eb' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ opacity: 0.9 }}>Waiting a few seconds for fresh insights…</div>
+                  <div style={{ fontVariantNumeric: 'tabular-nums', opacity: 0.7 }}>{Math.ceil(waitMsLeft/1000)}s</div>
+                </div>
+                <div style={{ height: 6, background: '#f2f4f7', borderRadius: 6, marginTop: 8 }}>
+                  <div style={{ height: 6, borderRadius: 6, width: `${100 - (waitMsLeft/12000)*100}%`, background: '#8b5cf6', transition: 'width 250ms linear' }} />
+                </div>
+              </Card>
+            )}
+            {/* Quick Guidance */}
+            {loading && (
+              <Card className="p-6 wellness-card space-y-3" style={{ borderLeft: '4px solid #e5e7eb' }}>
+                <div className="section-header" style={{ marginBottom: 6 }}>
+                  <h3 style={{ margin: 0 }}>Quick Guidance</h3>
+                </div>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <div style={{ height: 16, background: '#eef2ff', borderRadius: 6, width: '30%' }} />
+                  <div style={{ height: 12, background: '#f2f4f7', borderRadius: 6, width: '90%' }} />
+                  <div style={{ height: 12, background: '#f2f4f7', borderRadius: 6, width: '80%' }} />
+                </div>
+              </Card>
+            )}
+            {!loading && latestInsight && !latestInsight.guidance && (
+              <Card className="p-6 wellness-card space-y-2" style={{ borderLeft: '4px solid #e5e7eb' }}>
+                <div className="section-header" style={{ marginBottom: 6 }}>
+                  <h3 style={{ margin: 0 }}>Quick Guidance</h3>
+                </div>
+                <div style={{ opacity: 0.85 }}>Preparing a short, supportive tip…</div>
+              </Card>
+            )}
+            {latestInsight?.guidance && (
+              <Card className="p-6 wellness-card space-y-2" style={{ borderLeft: `4px solid ${guidanceBorder}` }}>
+                <div className="section-header" style={{ marginBottom: 6 }}>
+                  <h3 style={{ margin: 0 }}>Quick Guidance</h3>
+                  {latestInsight.guidance.safety === 'high-risk' && (
+                    <span style={{ background: '#fff1f2', color: '#b91c1c', border: '1px solid #fecaca', padding: '2px 6px', borderRadius: 9999, fontSize: '0.75rem' }}>High risk</span>
+                  )}
+                </div>
+                <div>
+                  <div style={{ fontWeight: 600, marginBottom: 2 }}>{latestInsight.guidance.word || 'Guidance'}</div>
+                  <div style={{ opacity: 0.9 }}>{latestInsight.guidance.suggestion}</div>
+                </div>
+                {latestInsight.guidance.cta?.route && (
+                  <div style={{ marginTop: 8 }}>
+                    <button
+                      className="btn"
+                      onClick={() => {
+                        const r = latestInsight.guidance?.cta?.route || '#/insights';
+                        if (r.startsWith('#')) { window.location.hash = r.slice(1); }
+                        else { window.location.href = r; }
+                      }}
+                    >{latestInsight.guidance.cta?.label || 'Open'}</button>
+                  </div>
+                )}
+              </Card>
+            )}
             {error && (
               <Card className="p-4">
                 <div style={{ color: '#b00020' }}>{error}</div>
@@ -133,15 +226,75 @@ export function Insights() {
               <div style={{ opacity: 0.8, fontSize: '0.9rem' }}>Up from {wellness.prev}% last week</div>
             </Card>
 
-            {/* Latest Capsule response */}
+            {/* Latest Capsule responses (up to 2) */}
             <Card className="p-6 wellness-card space-y-3">
               <div className="section-header" style={{ marginBottom: 6 }}>
-                <h3 style={{ margin: 0 }}>Latest AI Response</h3>
+                <h3 style={{ margin: 0 }}>{recent.length > 1 ? 'Latest AI Responses' : 'Latest AI Response'}</h3>
               </div>
               {loading && <div style={{ opacity: 0.8 }}>Loading your latest insights…</div>}
               {!loading && recent.length === 0 && <div style={{ opacity: 0.8 }}>No insights yet. Create a journal entry to see AI responses here.</div>}
-              {!loading && recent.length > 0 && recent[0]?.capsule && (
-                <CapsuleDisplay capsule={recent[0].capsule} loading={false} />
+              {!loading && recent.length > 0 && (
+                <div className="space-y-4">
+                  {[recent[0], recent[1]].filter(Boolean).map((it, i) => {
+                    const ins = it!.insight;
+                    const cap = it!.capsule;
+                    const payload = cap?.payload || {};
+                    return cap ? (
+                      <div key={ins?.insightId || i}>
+                        {/* Compact header with summary and meta */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                          <b>{ins?.summary || deriveInsightTitle(ins)}</b>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            {(() => {
+                              const r = (ins?.risk || {}) as { suicidal?: number; self_harm?: number; violence?: number };
+                              const high = (r.suicidal ?? 0) >= 0.75 || (r.self_harm ?? 0) >= 0.7 || (r.violence ?? 0) >= 0.6;
+                              return high ? <span style={{ background: '#fff1f2', color: '#b91c1c', border: '1px solid #fecaca', padding: '2px 6px', borderRadius: 9999, fontSize: '0.75rem' }}>High risk</span> : null;
+                            })()}
+                            {ins?.createdAt?.toDate && (
+                              <div style={{ opacity: 0.75, fontSize: '0.85rem' }}>{ins.createdAt.toDate().toLocaleString()}</div>
+                            )}
+                              {/* Anchor link to full card */}
+                              {ins?.insightId && (
+                                <a
+                                  href={`#insight-${ins.insightId}`}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    const el = document.getElementById(`insight-${ins.insightId}`);
+                                    if (el) {
+                                      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                      // brief highlight
+                                      const old = el.style.boxShadow;
+                                      el.style.boxShadow = '0 0 0 3px rgba(139,92,246,0.35) inset';
+                                      setTimeout(() => { el.style.boxShadow = old; }, 1200);
+                                    }
+                                  }}
+                                  style={{ fontSize: '0.85rem', color: '#6b4fd8', textDecoration: 'underline', marginLeft: 4 }}
+                                >View full insight</a>
+                              )}
+                          </div>
+                        </div>
+                        {/* Surface art images first if available */}
+                        {Array.isArray(payload.images) && payload.images.length > 0 && (
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                            {payload.images.slice(0, 4).map((src: string, idx: number) => (
+                              /^https?:\/\//.test(src) ? (
+                                <img key={idx} src={src} alt="Capsule visual" style={{ width: '100%', borderRadius: 8, border: '1px solid #eee', objectFit: 'cover' }} />
+                              ) : null
+                            ))}
+                          </div>
+                        )}
+                        <CapsuleDisplay capsule={cap} loading={false} />
+                        {i === 0 && latestInsight?.guidance?.word && (
+                          <div style={{ marginTop: 6, opacity: 0.8, fontSize: '0.85rem' }}>
+                            Guided by: <span style={{ fontWeight: 600 }}>{latestInsight.guidance.word}</span>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div key={ins?.insightId || i} style={{ opacity: 0.8 }}>No AI capsule for this insight.</div>
+                    );
+                  })}
+                </div>
               )}
             </Card>
 
@@ -156,86 +309,7 @@ export function Insights() {
               </Card>
             </div>
 
-            <div>
-              <h3 style={{ margin: '6px 0' }}>AI Insights</h3>
-              {loading && <Card className="p-4"><div style={{ opacity: 0.8 }}>Loading previous insights…</div></Card>}
-              {!loading && recent.slice(1).length === 0 && (
-                <Card className="p-4"><div style={{ opacity: 0.8 }}>No previous insights yet.</div></Card>
-              )}
-              {!loading && recent.slice(1).map((item, idx) => (
-                <Card key={item.insight.insightId || idx} className="p-4" style={{ marginTop: idx === 0 ? 0 : 8 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                    <b>{item.insight?.summary || deriveInsightTitle(item.insight)}</b>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {(() => {
-                        const r = (item.insight?.risk || {}) as { suicidal?: number; self_harm?: number; violence?: number };
-                        const high = (r.suicidal ?? 0) >= 0.75 || (r.self_harm ?? 0) >= 0.7 || (r.violence ?? 0) >= 0.6;
-                        return high ? <span style={{ background: '#fff1f2', color: '#b91c1c', border: '1px solid #fecaca', padding: '2px 6px', borderRadius: 9999, fontSize: '0.75rem' }}>High risk</span> : null;
-                      })()}
-                      {item.insight?.createdAt?.toDate && (
-                        <div style={{ opacity: 0.75, fontSize: '0.85rem' }}>{item.insight.createdAt.toDate().toLocaleString()}</div>
-                      )}
-                    </div>
-                  </div>
-                  {item.capsule ? (
-                    <div style={{ marginTop: 6 }}>
-                      {/* Cover all capsule shapes: summary/content/payload.story */}
-                      {item.capsule.summary && <div>{item.capsule.summary}</div>}
-                      {item.capsule.content && <pre style={{ whiteSpace: 'pre-wrap' }}>{item.capsule.content}</pre>}
-                      {item.capsule?.payload?.story && (
-                        <pre style={{ whiteSpace: 'pre-wrap' }}>{item.capsule.payload.story}</pre>
-                      )}
-                      {!item.capsule.summary && !item.capsule.content && !item.capsule?.payload?.story && (
-                        <div style={{ opacity: 0.8 }}>Capsule available</div>
-                      )}
-                    </div>
-                  ) : (
-                    <div style={{ opacity: 0.8, marginTop: 6 }}>No AI capsule for this insight.</div>
-                  )}
-                </Card>
-              ))}
-              {/* Full history of insights */}
-              <h4 style={{ margin: '12px 0 6px' }}>All Insights</h4>
-              {insightsAll.length === 0 && !loading && (
-                <Card className="p-4"><div style={{ opacity: 0.8 }}>No insights yet.</div></Card>
-              )}
-              {insightsAll.map((ins, idx) => (
-                <Card key={ins.insightId || idx} className="p-4" style={{ marginTop: idx === 0 ? 0 : 8 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                    <b>{ins.summary || deriveInsightTitle(ins)}</b>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {(() => {
-                        const r = (ins?.risk || {}) as { suicidal?: number; self_harm?: number; violence?: number };
-                        const high = (r.suicidal ?? 0) >= 0.75 || (r.self_harm ?? 0) >= 0.7 || (r.violence ?? 0) >= 0.6;
-                        return high ? <span style={{ background: '#fff1f2', color: '#b91c1c', border: '1px solid #fecaca', padding: '2px 6px', borderRadius: 9999, fontSize: '0.75rem' }}>High risk</span> : null;
-                      })()}
-                      {ins.createdAt?.toDate && (
-                        <div style={{ opacity: 0.75, fontSize: '0.85rem' }}>{ins.createdAt.toDate().toLocaleString()}</div>
-                      )}
-                    </div>
-                  </div>
-                </Card>
-              ))}
-              <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
-                <button
-                  className="secondary"
-                  disabled={insightsLoadingMore || !insightsCursor}
-                  onClick={async () => {
-                    if (!uid || !insightsCursor) return;
-                    setInsightsLoadingMore(true);
-                    try {
-                      const next = await listUserInsightsPage(uid, 10, insightsCursor);
-                      setInsightsAll(prev => [...prev, ...next.items]);
-                      setInsightsCursor(next.nextCursor);
-                    } finally {
-                      setInsightsLoadingMore(false);
-                    }
-                  }}
-                >{insightsCursor ? (insightsLoadingMore ? 'Loading…' : 'Load more') : 'No more insights'}</button>
-              </div>
-            </div>
-
-            {/* All Capsules generated */}
+            {/* All Capsules generated (moved above insights) */}
             <div>
               <h3 style={{ margin: '12px 0 6px' }}>AI Capsules</h3>
               {capsulesAll.length === 0 && !loading && (
@@ -324,7 +398,7 @@ export function Insights() {
               ))}
               <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
                 <button
-                  className="secondary"
+                  className="btn btn-outline"
                   disabled={capsulesLoadingMore || !capsulesCursor}
                   onClick={async () => {
                     if (!uid || !capsulesCursor) return;
@@ -340,6 +414,87 @@ export function Insights() {
                 >{capsulesCursor ? (capsulesLoadingMore ? 'Loading…' : 'Load more') : 'No more capsules'}</button>
               </div>
             </div>
+
+            <div>
+              <h3 style={{ margin: '6px 0' }}>AI Insights</h3>
+              {loading && <Card className="p-4"><div style={{ opacity: 0.8 }}>Loading previous insights…</div></Card>}
+              {!loading && recent.slice(2).length === 0 && (
+                <Card className="p-4"><div style={{ opacity: 0.8 }}>No previous insights yet.</div></Card>
+              )}
+              {!loading && recent.slice(2).map((item, idx) => (
+                <Card id={item.insight.insightId ? `insight-${item.insight.insightId}` : undefined} key={item.insight.insightId || idx} className="p-4" style={{ marginTop: idx === 0 ? 0 : 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                    <b>{item.insight?.summary || deriveInsightTitle(item.insight)}</b>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {(() => {
+                        const r = (item.insight?.risk || {}) as { suicidal?: number; self_harm?: number; violence?: number };
+                        const high = (r.suicidal ?? 0) >= 0.75 || (r.self_harm ?? 0) >= 0.7 || (r.violence ?? 0) >= 0.6;
+                        return high ? <span style={{ background: '#fff1f2', color: '#b91c1c', border: '1px solid #fecaca', padding: '2px 6px', borderRadius: 9999, fontSize: '0.75rem' }}>High risk</span> : null;
+                      })()}
+                      {item.insight?.createdAt?.toDate && (
+                        <div style={{ opacity: 0.75, fontSize: '0.85rem' }}>{item.insight.createdAt.toDate().toLocaleString()}</div>
+                      )}
+                    </div>
+                  </div>
+                  {item.capsule ? (
+                    <div style={{ marginTop: 6 }}>
+                      {/* Cover all capsule shapes: summary/content/payload.story */}
+                      {item.capsule.summary && <div>{item.capsule.summary}</div>}
+                      {item.capsule.content && <pre style={{ whiteSpace: 'pre-wrap' }}>{item.capsule.content}</pre>}
+                      {item.capsule?.payload?.story && (
+                        <pre style={{ whiteSpace: 'pre-wrap' }}>{item.capsule.payload.story}</pre>
+                      )}
+                      {!item.capsule.summary && !item.capsule.content && !item.capsule?.payload?.story && (
+                        <div style={{ opacity: 0.8 }}>Capsule available</div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ opacity: 0.8, marginTop: 6 }}>No AI capsule for this insight.</div>
+                  )}
+                </Card>
+              ))}
+              {/* Full history of insights */}
+              <h4 style={{ margin: '12px 0 6px' }}>All Insights</h4>
+              {insightsAll.length === 0 && !loading && (
+                <Card className="p-4"><div style={{ opacity: 0.8 }}>No insights yet.</div></Card>
+              )}
+              {insightsAll.map((ins, idx) => (
+                <Card key={ins.insightId || idx} className="p-4" style={{ marginTop: idx === 0 ? 0 : 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                    <b>{ins.summary || deriveInsightTitle(ins)}</b>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {(() => {
+                        const r = (ins?.risk || {}) as { suicidal?: number; self_harm?: number; violence?: number };
+                        const high = (r.suicidal ?? 0) >= 0.75 || (r.self_harm ?? 0) >= 0.7 || (r.violence ?? 0) >= 0.6;
+                        return high ? <span style={{ background: '#fff1f2', color: '#b91c1c', border: '1px solid #fecaca', padding: '2px 6px', borderRadius: 9999, fontSize: '0.75rem' }}>High risk</span> : null;
+                      })()}
+                      {ins.createdAt?.toDate && (
+                        <div style={{ opacity: 0.75, fontSize: '0.85rem' }}>{ins.createdAt.toDate().toLocaleString()}</div>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+              ))}
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
+                <button
+                  className="btn btn-outline"
+                  disabled={insightsLoadingMore || !insightsCursor}
+                  onClick={async () => {
+                    if (!uid || !insightsCursor) return;
+                    setInsightsLoadingMore(true);
+                    try {
+                      const next = await listUserInsightsPage(uid, 10, insightsCursor);
+                      setInsightsAll(prev => [...prev, ...next.items]);
+                      setInsightsCursor(next.nextCursor);
+                    } finally {
+                      setInsightsLoadingMore(false);
+                    }
+                  }}
+                >{insightsCursor ? (insightsLoadingMore ? 'Loading…' : 'Load more') : 'No more insights'}</button>
+              </div>
+            </div>
+
+            {/* moved AI Capsules above */}
           </TabsContent>
 
           <TabsContent value="patterns" className="space-y-6">

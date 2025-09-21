@@ -3,6 +3,11 @@ name: Deploy Firebase Hosting on push
 on:
   push:
     branches: [ main ]
+    # Only deploy Hosting when relevant files change (avoid README-only deploys)
+    paths:
+      - 'frontend/**'
+      - 'firebase.json'
+      - '.github/workflows/hosting-deploy.yml'
 
 concurrency:
   group: hosting-deploy
@@ -23,6 +28,31 @@ jobs:
       - name: Install frontend deps
         working-directory: frontend
         run: npm ci
+
+      # Provide build-time env vars to Vite using repo secrets.
+      # IMPORTANT: Add these in GitHub → Settings → Secrets and variables → Actions
+      # Required for Firebase client to initialize (API key, auth domain, project, bucket, senderId, appId).
+      - name: Create .env.production for Vite
+        working-directory: frontend
+        run: |
+          rm -f .env.production
+          set -e
+          {
+            echo "VITE_FIREBASE_API_KEY=${{ secrets.VITE_FIREBASE_API_KEY }}"
+            echo "VITE_FIREBASE_AUTH_DOMAIN=${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}"
+            echo "VITE_FIREBASE_PROJECT_ID=${{ secrets.VITE_FIREBASE_PROJECT_ID }}"
+            echo "VITE_FIREBASE_STORAGE_BUCKET=${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}"
+            echo "VITE_FIREBASE_MESSAGING_SENDER_ID=${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}"
+            echo "VITE_FIREBASE_APP_ID=${{ secrets.VITE_FIREBASE_APP_ID }}"
+            echo "VITE_FUNCTION_SUBMIT_ENTRY_URL=${{ secrets.VITE_FUNCTION_SUBMIT_ENTRY_URL }}"
+            echo "VITE_FUNCTION_REQUEST_MEDIA_UPLOAD_URL=${{ secrets.VITE_FUNCTION_REQUEST_MEDIA_UPLOAD_URL }}"
+            echo "VITE_FUNCTION_GET_MEDIA_URL=${{ secrets.VITE_FUNCTION_GET_MEDIA_URL }}"
+            echo "VITE_FUNCTION_GET_CLASSIFIER_STATUS_URL=${{ secrets.VITE_FUNCTION_GET_CLASSIFIER_STATUS_URL }}"
+            echo "VITE_FUNCTION_FETCH_ENTRY_BUNDLE_URL=${{ secrets.VITE_FUNCTION_FETCH_ENTRY_BUNDLE_URL }}"
+            echo "VITE_FUNCTION_CREATE_DRAFT_ENTRY_URL=${{ secrets.VITE_FUNCTION_CREATE_DRAFT_ENTRY_URL }}"
+            echo "VITE_GET_SWARM_NARRATIVE_URL=${{ secrets.VITE_GET_SWARM_NARRATIVE_URL }}"
+            echo "VITE_GET_ANALYTICS_SUMMARY_URL=${{ secrets.VITE_GET_ANALYTICS_SUMMARY_URL }}"
+          } > .env.production
 
       - name: Install Firebase CLI
         run: npm install -g firebase-tools

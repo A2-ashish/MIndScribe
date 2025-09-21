@@ -65,10 +65,61 @@ export function CapsuleDisplay({ capsule, loading }: { capsule: any; loading: bo
           </ul>
         </div>
       )}
+      {Array.isArray(payload.songs) && payload.songs.length > 0 && (
+        <div>
+          <h4 style={{ margin: '6px 0' }}>Songs</h4>
+          <ul>
+            {payload.songs.map((t: string, i: number) => <li key={i}><a href={t} target="_blank" rel="noreferrer">{t}</a></li>)}
+          </ul>
+        </div>
+      )}
       {payload.artPrompt && (
         <div>
           <h4 style={{ margin: '6px 0' }}>Art Prompt</h4>
           <p>{payload.artPrompt}</p>
+        </div>
+      )}
+      {Array.isArray(payload.images) && payload.images.length > 0 && (
+        <div>
+          <h4 style={{ margin: '6px 0' }}>Images</h4>
+          <div style={{ display: 'grid', gap: 8 }}>
+            {payload.images.map((desc: string, i: number) => {
+              const isUrl = typeof desc === 'string' && /^(https?:)?\/\//.test(desc);
+              return isUrl ? (
+                <img key={i} src={desc} alt="Calming visual" style={{ width: '100%', borderRadius: 8, border: '1px solid var(--color-outline)' }} />
+              ) : (
+                <div key={i}>{desc}</div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {Array.isArray(payload.motivational) && payload.motivational.length > 0 && (
+        <div>
+          <h4 style={{ margin: '6px 0' }}>Motivational</h4>
+          <ul>
+            {payload.motivational.map((line: string, i: number) => <li key={i}>{line}</li>)}
+          </ul>
+        </div>
+      )}
+      {Array.isArray(payload.chat) && payload.chat.length > 0 && (
+        <div>
+          <h4 style={{ margin: '6px 0' }}>Support Chat</h4>
+          <div style={{ display: 'grid', gap: 6 }}>
+            {payload.chat.map((m: any, i: number) => (
+              <div key={i} style={{
+                justifySelf: m.role === 'you' ? 'end' : 'start',
+                background: m.role === 'you' ? '#e8f0fe' : '#f1f3f4',
+                border: '1px solid var(--color-outline)',
+                borderRadius: 10,
+                padding: '6px 10px',
+                maxWidth: '80%'
+              }}>
+                <div style={{ fontSize: '0.75rem', opacity: 0.7, marginBottom: 2 }}>{m.role}</div>
+                <div>{m.text}</div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
       {(payload.reusedFrom || payload.similarityScore != null) && (

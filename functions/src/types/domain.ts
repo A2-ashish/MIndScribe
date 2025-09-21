@@ -16,8 +16,9 @@ export interface Insight {
   emotions: { label: string; score: number }[];
   sentiment: { compound: number };
   topics: string[];
-  risk: { suicidal: number; self_harm: number };
+  risk: { suicidal: number; self_harm: number; violence?: number };
   confidence: number;
+  guidance?: { word: string; suggestion: string; cta?: { label: string; route: string }; safety: 'ok'|'caution'|'high-risk' };
   createdAt: FirebaseFirestore.Timestamp;
 }
 
