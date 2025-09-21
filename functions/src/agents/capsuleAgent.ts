@@ -1,7 +1,8 @@
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { db } from '../lib/firestore';
 import { decideCapsuleType } from '../lib/capsuleSelector';
-import { generateStory } from '../lib/gemini';
+import { generateStory, generateBreathingPlan, generateArtPrompt } from '../lib/gemini';
+import { recommendPlaylists } from '../lib/youtube';
 import { Timestamp } from 'firebase-admin/firestore';
 import { findSimilarCapsule, storeCapsuleEmbedding, logSimilarityDecision } from '../lib/similarity';
 
@@ -111,11 +112,19 @@ export const onInsightCreated = onDocumentCreated(
       }
 
       if (capsuleType === 'breathing' && !payload.steps) {
-        payload.steps = ['Inhale 4', 'Hold 2', 'Exhale 6', 'Repeat 6x'];
+        const cue = primaryTopic || primaryEmotion || 'calm';
+        const plan = await withTimeout(generateBreathingPlan(cue), 15000);
+        payload.steps = plan.steps.map(s => `${s.label} ${s.seconds}${s.repetitions?` x${s.repetitions}`:''}`);
+        // Attach short script as story to reuse frontend display
+        payload.story = payload.story || plan.script;
       } else if (capsuleType === 'playlist' && !payload.tracks) {
-        payload.tracks = [ 'https://youtube.com/lofi1', 'https://youtube.com/lofi2' ];
+        const mood = primaryTopic || primaryEmotion || 'calm';
+        const rec = await withTimeout(recommendPlaylists(mood, { max: 5 }), 12000);
+        payload.tracks = rec.playlistUrls;
       } else if (capsuleType === 'art' && !payload.artPrompt) {
-        payload.artPrompt = `Abstract calming visual about ${primaryEmotion}`;
+        const cue = primaryTopic || primaryEmotion || 'calm';
+        const art = await withTimeout(generateArtPrompt(cue), 12000);
+        payload.artPrompt = `${art.prompt} | style: ${art.style} | palette: ${art.palette.join(', ')}`;
       }
     } catch (e: any) {
       errorMessage = e?.message || 'unknown_error';

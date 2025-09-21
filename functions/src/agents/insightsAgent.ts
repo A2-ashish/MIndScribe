@@ -63,10 +63,35 @@ export const onEntryCreated = onDocumentWritten(
     const CLASSIFIER_ENFORCE = (process.env.CLASSIFIER_ENFORCE || 'off').toLowerCase();
     const enforcement: 'off'|'soft'|'hard' = (CLASSIFIER_ENFORCE === 'soft' || CLASSIFIER_ENFORCE === 'hard') ? CLASSIFIER_ENFORCE as any : 'off';
 
+    // Build a compact human-friendly summary for UI lists
+    // Derive mood label primarily from sentiment.trimmed thresholds, fallback to top emotion label
+    let primaryEmotion = 'neutral';
+    if (typeof analysis.sentiment?.compound === 'number') {
+      const c = analysis.sentiment.compound;
+      if (c >= 0.25) primaryEmotion = 'positive';
+      else if (c <= -0.25) primaryEmotion = 'negative';
+      else primaryEmotion = 'neutral';
+    }
+    if (primaryEmotion === 'neutral' && analysis.emotions && analysis.emotions[0]?.label) {
+      primaryEmotion = analysis.emotions[0].label;
+    }
+    const topics = Array.isArray(analysis.topics) ? analysis.topics.slice(0, 2) : [];
+    const sent = typeof analysis.sentiment?.compound === 'number' ? analysis.sentiment.compound : 0;
+    const risk = analysis.risk || { suicidal: 0, self_harm: 0, violence: 0 };
+    const riskBad = (risk.suicidal >= 0.75) ? 'suicidal risk' : (risk.self_harm >= 0.7) ? 'self-harm risk' : (risk.violence >= 0.6) ? 'violence risk' : '';
+    const cap = (s: string) => s ? (s.charAt(0).toUpperCase() + s.slice(1)) : s;
+    const parts: string[] = [];
+    parts.push(`${cap(primaryEmotion)} mood`);
+    if (topics.length) parts.push(`topics: ${topics.join(', ')}`);
+    parts.push(`sentiment ${(sent >= 0 ? '+' : '')}${sent.toFixed(2)}`);
+    if (riskBad) parts.push(riskBad);
+    const summary = parts.join(' • ');
+
     await insightRef.set({
       insightId: insightRef.id,
       entryId: entry.entryId,
       userId: entry.userId,
+      summary,
       emotions: analysis.emotions,
       sentiment: analysis.sentiment,
       topics: analysis.topics,

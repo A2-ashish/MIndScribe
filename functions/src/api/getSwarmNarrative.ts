@@ -3,7 +3,7 @@ import { db } from '../lib/firestore';
 import { HttpError, errorResponse } from '../lib/httpError';
 import { REGION } from '../config/region';
 import { Timestamp } from 'firebase-admin/firestore';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+// Lazy-load Gemini client to avoid heavy initialization at module load time
 
 const ADMIN_KEY = process.env.ADMIN_KEY;
 
@@ -31,6 +31,8 @@ export const getSwarmNarrative = onRequest({ region: REGION }, async (req, res) 
     try {
       const key = process.env.GEMINI_API_KEY;
       if (key) {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { GoogleGenerativeAI } = require('@google/generative-ai');
         const gen = new GoogleGenerativeAI(key);
         const model = gen.getGenerativeModel({ model: 'gemini-1.5-flash' });
         const prompt = `Write a 3-4 sentence, empathetic weekly community mood note based on: topEmotion=${topEmotion}, avgMood=${avgMood.toFixed(3)}, totalInsights=${total}. Be supportive, non-clinical, avoid triggers. Return plain text.`;

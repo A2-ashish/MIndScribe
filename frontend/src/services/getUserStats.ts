@@ -11,7 +11,8 @@ export async function getUserStats(uid: string): Promise<UserStats> {
   let mediaCount = 0;
 
   try {
-    const lastEntryQ = query(collection(db, 'entries'), where('uid', '==', uid), orderBy('createdAt', 'desc'), limit(1));
+    // Backend uses 'userId' on entries
+    const lastEntryQ = query(collection(db, 'entries'), where('userId', '==', uid), orderBy('createdAt', 'desc'), limit(1));
     const snap = await getDocs(lastEntryQ);
     const doc = snap.docs[0];
     if (doc) {

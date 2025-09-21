@@ -6,6 +6,9 @@ import {
   EmailAuthProvider,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+  GithubAuthProvider,
   User
 } from 'firebase/auth';
 import { app } from './firebaseCore';
@@ -45,6 +48,17 @@ export async function register(email: string, password: string) {
 
 export async function signIn(email: string, password: string) {
   return signInWithEmailAndPassword(auth, email, password);
+}
+
+// OAuth helpers
+export async function signInWithGoogle() {
+  const provider = new GoogleAuthProvider();
+  return signInWithPopup(auth, provider);
+}
+
+export async function signInWithGitHub() {
+  const provider = new GithubAuthProvider();
+  return signInWithPopup(auth, provider);
 }
 
 // Dev-only helpers exposed on window to make it easy to fetch an ID token from the browser console

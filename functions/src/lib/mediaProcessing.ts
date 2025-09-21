@@ -1,12 +1,17 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-
-let genai: GoogleGenerativeAI | null = null;
-function getClient(): GoogleGenerativeAI | null {
+// Lazy-load Gemini SDK to avoid heavy initialization at deploy/load time
+let genai: any | null = null;
+function getClient(): any | null {
   if (genai) return genai;
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
-  genai = new GoogleGenerativeAI(key);
-  return genai;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    genai = new GoogleGenerativeAI(key);
+    return genai;
+  } catch {
+    return null;
+  }
 }
 
 export async function transcribeAudioPlaceholder(filePath: string, mime: string): Promise<{ transcript: string; confidence: number }> {

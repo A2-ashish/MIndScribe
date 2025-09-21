@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+// Lazy-load Gemini SDK to avoid heavy initialization at deploy/load time
 
 export const CLASSIFIER_MODEL_VERSION = 'v1';
 type ClassifierPath = 'heuristic' | 'gemini' | 'ft';
@@ -18,13 +18,19 @@ export interface ClassifierScores {
   depth: number;
 }
 
-let client: GoogleGenerativeAI | null = null;
-function getClient(): GoogleGenerativeAI | null {
+let client: any | null = null;
+function getClient(): any | null {
   if (client) return client;
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
-  client = new GoogleGenerativeAI(key);
-  return client;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    client = new GoogleGenerativeAI(key);
+    return client;
+  } catch {
+    return null;
+  }
 }
 
 function clamp01(n: any): number {
@@ -35,8 +41,11 @@ function heuristicClassifier(text: string): ClassifierScores {
   const t = (text || '').toLowerCase();
   const intenseTokens = ['overwhelmed','shaking','panic','panicking','devastated','furious','numb','empty','exhausted'];
   const distressTokens = ['cant cope','can\'t cope','breaking down','collapse','screaming','crying','tears','anxiety','anxious','panic'];
-  const ideationTokens = ['i want to die','end my life','kill myself','suicide','dont want to exist','don\'t want to exist'];
-  const selfHarmTokens = ['cut myself','hurt myself','self-harm','self harm','bleed'];
+  const ideationTokens = [
+    'i want to die','end my life','kill myself','suicide','dont want to exist','don\'t want to exist',
+    'suicidal','suicidal thoughts','suicidal ideation','end it all','life not worth living','i can\'t go on','don\'t want to be here'
+  ];
+  const selfHarmTokens = ['cut myself','cutting myself','burn myself','self-harm','self harm','self injury','self-injury','bleed','hurt myself on purpose'];
   const violenceTokens = ['hurt them','kill them','attack','revenge'];
 
   function score(list: string[], base=0.0, per=0.18, cap=0.95) {
@@ -45,8 +54,8 @@ function heuristicClassifier(text: string): ClassifierScores {
     return Math.min(cap, s);
   }
 
-  const suicidal = score(ideationTokens, 0.02, 0.35);
-  const selfHarm = Math.max(score(selfHarmTokens, 0.01, 0.30), suicidal - 0.15);
+  const suicidal = score(ideationTokens, 0.03, 0.38);
+  const selfHarm = Math.max(score(selfHarmTokens, 0.02, 0.32), suicidal - 0.12);
   const violence = score(violenceTokens, 0.01, 0.25, 0.9);
   const emotionalIntensity = Math.max(score(intenseTokens, 0.05, 0.08), 0);
   const distress = Math.max(score(distressTokens, 0.05, 0.07), emotionalIntensity * 0.6);
@@ -61,7 +70,7 @@ function heuristicClassifier(text: string): ClassifierScores {
 async function classifyTextGemini(trimmed: string): Promise<ClassifierScores> {
   const c = getClient();
   if (!c) return heuristicClassifier(trimmed);
-  const model = c.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = c.getGenerativeModel({ model: 'gemini-2.5-flash' });
   const prompt = `You are a probability classifier. Return ONLY valid JSON with keys: emotionalIntensity, distress, suicidal, selfHarm, violence, depth (all 0..1). Definitions: emotionalIntensity=overall affect strength; distress=acute dysregulation/overwhelm; suicidal=prob active suicidal ideation; selfHarm=prob self-injury intent; violence=prob intent harm others; depth=reflective richness (structure, self-reflection). Keep false positives low. Text:"""${trimmed.slice(0,4000).replace(/"/g,'\\"')}"""`;
   try {
     const resp = await model.generateContent(prompt);
@@ -79,11 +88,11 @@ async function classifyTextGemini(trimmed: string): Promise<ClassifierScores> {
     };
     // Guardrails
     const lower = trimmed.toLowerCase();
-    if (/i want to die|end my life|kill myself|suicide/.test(lower)) {
-      scores.suicidal = Math.max(scores.suicidal, 0.75);
+    if (/(suicidal(\b|[^a-z])|suicidal thoughts?|suicidal ideation|life (is|'s)? not worth living|don'?t want to (be here|live)|i can'?t go on|end it all|i want to die|kill myself|end my life|suicide)/.test(lower)) {
+      scores.suicidal = Math.max(scores.suicidal, 0.8);
     }
-    if (/cut myself|self-harm|self harm/.test(lower)) {
-      scores.selfHarm = Math.max(scores.selfHarm, 0.65);
+    if (/(cut(ting)? myself|burn(ing)? myself|self[-\s]?harm|self[-\s]?injur(y|ies)|hurt myself on purpose)/.test(lower)) {
+      scores.selfHarm = Math.max(scores.selfHarm, 0.7);
     }
     return scores;
   } catch {

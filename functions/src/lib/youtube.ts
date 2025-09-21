@@ -1,12 +1,85 @@
-/** Placeholder for YouTube Data API integration */
+/** YouTube Data API integration (search-based). */
 export interface PlaylistRecommendation {
-  mood: string;
-  playlistUrls: string[];
+  query: string;
+  playlistUrls: string[]; // full watch URLs
 }
 
-export async function recommendPlaylists(mood: string): Promise<PlaylistRecommendation> {
-  // Hard-coded stub; later call YouTube API with mood keywords.
-  const base = 'https://youtube.com/watch?v=';
-  const ids = mood === 'sad' ? ['lofiSad1','uplift2','calm3'] : ['focus1','breathe2','energy3'];
-  return { mood, playlistUrls: ids.map(id => base + id) };
+type SearchOpts = { max?: number };
+
+// Simple in-memory cache to reduce API calls across warm invocations
+const cache = new Map<string, { ts: number; urls: string[] }>();
+const FIVE_MIN = 5 * 60 * 1000;
+
+function normalizeQuery(moodOrTopic: string): string {
+  const t = (moodOrTopic || '').toLowerCase().trim();
+  if (!t) return 'calm focus lofi';
+  // Map common moods to search-intent phrases
+  const map: Record<string, string> = {
+    sad: 'uplifting calm music',
+    anxious: 'anxiety relief breathing music',
+    stressed: 'calm ambient focus music',
+    angry: 'soothing ambient slow music',
+    neutral: 'lofi calm background music',
+    happy: 'positive relaxing instrumental',
+    focus: 'lofi focus beats',
+    calm: 'calm ambient music',
+    tired: 'gentle piano relaxation'
+  };
+  return map[t] || `${t} relaxing music`;
+}
+
+export async function recommendPlaylists(moodOrTopic: string, opts: SearchOpts = {}): Promise<PlaylistRecommendation> {
+  const max = Math.min(Math.max(opts.max || 5, 1), 10);
+  const q = normalizeQuery(moodOrTopic);
+
+  // Cache
+  const hit = cache.get(q);
+  const now = Date.now();
+  if (hit && now - hit.ts < FIVE_MIN && hit.urls.length >= max) {
+    return { query: q, playlistUrls: hit.urls.slice(0, max) };
+  }
+
+  const key = process.env.YOUTUBE_API_KEY;
+  if (!key) {
+    // Graceful fallback to curated static URLs
+    const fallback = [
+      'https://www.youtube.com/watch?v=jfKfPfyJRdk', // lofi hip hop radio
+      'https://www.youtube.com/watch?v=5qap5aO4i9A', // lofi beats
+      'https://www.youtube.com/watch?v=DWcJFNfaw9c', // ambient study
+      'https://www.youtube.com/watch?v=lTRiuFIWV54', // synthwave radio
+      'https://www.youtube.com/watch?v=2OEL4P1Rz04'  // piano relaxing
+    ];
+    cache.set(q, { ts: now, urls: fallback });
+    return { query: q, playlistUrls: fallback.slice(0, max) };
+  }
+
+  try {
+    const url = new URL('https://www.googleapis.com/youtube/v3/search');
+    url.searchParams.set('key', key);
+    url.searchParams.set('part', 'snippet');
+    url.searchParams.set('maxResults', String(max));
+    url.searchParams.set('q', q);
+    url.searchParams.set('type', 'video');
+    url.searchParams.set('videoCategoryId', '10'); // Music
+    url.searchParams.set('videoEmbeddable', 'true');
+    url.searchParams.set('safeSearch', 'moderate');
+
+    const resp = await fetch(url.toString());
+    if (!resp.ok) throw new Error(`YouTube API error: ${resp.status}`);
+    const json: any = await resp.json();
+    const ids: string[] = (json.items || [])
+      .map((it: any) => it?.id?.videoId)
+      .filter((v: any) => typeof v === 'string');
+    const urls = ids.map((id) => `https://www.youtube.com/watch?v=${id}`);
+    if (urls.length) cache.set(q, { ts: now, urls });
+    return { query: q, playlistUrls: urls.slice(0, max) };
+  } catch (e) {
+    console.warn('[youtube] search failed, using fallback', (e as any)?.message || e);
+    const fallback = [
+      'https://www.youtube.com/watch?v=jfKfPfyJRdk',
+      'https://www.youtube.com/watch?v=5qap5aO4i9A'
+    ];
+    cache.set(q, { ts: now, urls: fallback });
+    return { query: q, playlistUrls: fallback.slice(0, max) };
+  }
 }

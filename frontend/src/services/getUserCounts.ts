@@ -8,9 +8,10 @@ export type UserCounts = {
 };
 
 export async function getUserCounts(uid: string): Promise<UserCounts> {
-  const entriesQ = query(collection(db, 'entries'), where('uid', '==', uid));
-  const insightsQ = query(collection(db, 'insights'), where('uid', '==', uid));
-  const capsulesQ = query(collection(db, 'capsules'), where('uid', '==', uid));
+  // Backend writes use the field name 'userId'
+  const entriesQ = query(collection(db, 'entries'), where('userId', '==', uid));
+  const insightsQ = query(collection(db, 'insights'), where('userId', '==', uid));
+  const capsulesQ = query(collection(db, 'capsules'), where('userId', '==', uid));
 
   const [e, i, c] = await Promise.all([
     getCountFromServer(entriesQ).catch(() => ({ data: () => ({ count: 0 }) } as any)),
