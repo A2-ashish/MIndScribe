@@ -18,7 +18,13 @@ export const Journal: React.FC = () => {
       setSubmitting(true);
       const { entryId: submittedId } = await submitEntry(text, entryId || undefined);
       setEntryId(submittedId);
-      show({ title: 'Entry submitted', description: 'Your journal entry is processing.', variant: 'success' });
+      show({
+        title: 'Entry submitted',
+        description: 'Your journal entry is processing.',
+        variant: 'success',
+        duration: 5000,
+        action: { label: 'Go to Insights', href: '#/insights', variant: 'primary' }
+      });
     } catch (e:any) {
       show({ title: 'Submit failed', description: e?.message || 'Submit failed', variant: 'error', duration: 4000 });
     } finally { setSubmitting(false); }

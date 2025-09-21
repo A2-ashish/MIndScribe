@@ -1,11 +1,19 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 
+type ToastAction = {
+  label: string;
+  href?: string; // if provided, navigate on click
+  onClick?: () => void; // optional custom handler
+  variant?: 'primary' | 'secondary';
+};
+
 export type Toast = {
   id: number;
   title?: string;
   description?: string;
   duration?: number; // ms
   variant?: 'default' | 'success' | 'error';
+  action?: ToastAction;
 };
 
 type ToastContextValue = {
@@ -56,9 +64,42 @@ export function Toaster({ children }: { children?: React.ReactNode }) {
             >
               {t.title && <div className="font-semibold mb-1">{t.title}</div>}
               {t.description && <div style={{ opacity: 0.9 }}>{t.description}</div>}
-              <button onClick={() => dismiss(t.id)} className="text-sm" style={{ float: 'right', marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <span aria-hidden>✖</span> Close
-              </button>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 6 }}>
+                {t.action && (
+                  <button
+                    onClick={() => {
+                      const action = t.action;
+                      if (!action) { dismiss(t.id); return; }
+                      try {
+                        if (action.onClick) action.onClick();
+                        if (action.href) {
+                          if (action.href.startsWith('#')) {
+                            window.location.hash = action.href;
+                          } else {
+                            window.location.href = action.href;
+                          }
+                        }
+                      } finally {
+                        dismiss(t.id);
+                      }
+                    }}
+                    className="text-sm"
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      borderRadius: 8,
+                      padding: '6px 10px',
+                      border: (t.action?.variant === 'secondary') ? '1px solid var(--color-outline)' : '1px solid var(--color-primary)',
+                      background: (t.action?.variant === 'secondary') ? '#fff' : 'var(--color-primary)',
+                      color: (t.action?.variant === 'secondary') ? 'var(--color-on-surface)' : '#fff'
+                    }}
+                  >
+                    {t.action.label}
+                  </button>
+                )}
+                <button onClick={() => dismiss(t.id)} className="text-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <span aria-hidden>✖</span> Close
+                </button>
+              </div>
             </div>
           ))}
         </div>
